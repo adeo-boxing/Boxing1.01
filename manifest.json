@@ -1,15 +1,23 @@
 {
-  "name": "Nom de mon Application",
-  "short_name": "MonApp",
-  "start_url": "index.html",
+  "name": "App Travail Boxing",
+  "short_name": "Boxing App",
+  "description": "Application d'entraînement Ultra Stable V5",
+  "start_url": "Boxing_1.01.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#f0f0f0",
+  "theme_color": "#333333",
+  "orientation": "any",
   "icons": [
     {
       "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ]
 }
+
