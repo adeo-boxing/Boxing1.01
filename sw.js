@@ -1,6 +1,6 @@
 const CACHE_NAME = 'Boxing-app-v5';
 const ASSETS = [
-  'Boxing_1.01.html',
+  'index.html',
   'manifest.json'
   // Ajoutez ici vos fichiers CSS ou images si vous les séparez plus tard
 ];
