@@ -2,7 +2,7 @@
   "name": "App Travail Boxing",
   "short_name": "Boxing App",
   "description": "Application d'entraînement Ultra Stable V5",
-  "start_url": "Boxing_1.01.html",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#f0f0f0",
   "theme_color": "#333333",
