@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>App Travail BOXE - PWA Ultra Stable</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#333333">
+    
+    <script>
+      // Enregistrement du Service Worker pour le mode hors-ligne
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js')
+            .then(reg => console.log('SW enregistré !'))
+            .catch(err => console.log('Erreur SW:', err));
+        });
+      }
+    </script>
+
+    <style>
+        body {
+            margin: 0; padding: 0;
+            display: flex; height: 100vh; width: 100vw;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f0f0f0;
+            transition: background-color 0.3s;
+            overflow: hidden;
+        }
+        #sidebar {
+            width: 320px; background: white; border-right: 3px solid #333;
+            display: flex; flex-direction: column; padding: 15px; box-sizing: border-box;
+            z-index: 1000;
+        }
+        details summary {
+            padding: 15px; background: #333; color: white; border-radius: 8px;
+            cursor: pointer; font-weight: bold; list-style: none; text-align: center;
+        }
+        #main-display {
+            flex-grow: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 10px; text-align: center;
+        }
+        .setting-group { margin: 15px 0; font-weight: bold; }
+        .setting-group label { display: block; margin-bottom: 5px; color: #444; font-size: 0.85rem; }
+        .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        select { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #ddd; font-size: 1rem; }
+        input[type="checkbox"] { width: 25px; height: 25px; cursor: pointer; }
+        #status-text { font-size: clamp(2rem, 10vw, 4rem); font-weight: 900; text-transform: uppercase; margin-bottom: 15px; }
+        #circles-wrapper { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; width: 100%; min-height: 150px; }
+        .circle {
+            width: clamp(80px, 20vw, 130px); height: clamp(80px, 20vw, 130px); 
+            background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: clamp(2.5rem, 12vw, 4.5rem); font-weight: 900; color: #222;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .controls {
+            display: flex; flex-direction: column; align-items: center; width: 100%; gap: 10px; margin-top: 20px;
+        }
+        #btn-toggle, #btn-reset {
+            padding: 18px 40px; font-size: 1.3rem; font-weight: bold; 
+            cursor: pointer; border-radius: 50px; border: 3px solid #222; background: white;
+            width: 90%; max-width: 350px;
+        }
+        #btn-reset {
+            background: #ddd; border-color: #777; font-size: 1rem; padding: 10px 40px;
+        }
+        .active-btn { background: #e74c3c !important; color: white !important; }
+        #counter { font-size: 1.2rem; margin-top: 15px; font-weight: bold; color: #555; }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            #sidebar { width: 100%; height: auto; border-right: none; border-bottom: 3px solid #333; }
+            #main-display { flex: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <details>
+            <summary>Réglages ⚙️</summary>
+            <div style="padding-top:15px;">
+                <div class="row"><input type="checkbox" id="chk-colors" checked><label>Couleurs Flash</label></div>
+                <div class="row"><input type="checkbox" id="chk-numbers" checked><label>Coups & Voix</label></div>
+                <div class="setting-group"><label>Séries</label><select id="cfg-reps"></select></div>
+                <div class="setting-group"><label>Max Coups par flash</label><select id="cfg-max-nums"></select></div>
+                <div class="setting-group"><label>Temps d'affichage MIN (sec)</label><select id="cfg-time-min"></select></div>
+                <div class="setting-group"><label>Temps d'affichage MAX (sec)</label><select id="cfg-time-max"></select></div>
+                <div class="setting-group"><label>Temps de Travail (min)</label><select id="cfg-work"></select></div>
+                <div class="setting-group"><label>Temps de Repos</label><select id="cfg-rest"></select></div>
+            </div>
+        </details>
+    </div>
+
+    <div id="main-display">
+        <div id="status-text">PRÊT BOXE ?</div>
+        <div id="circles-wrapper"></div>
+        <div id="counter">Série : 0 / 0</div>
+        
+        <div class="controls">
+            <button id="btn-toggle">DEMARRER</button>
+            <button id="btn-reset">REINITIALISER</button>
+        </div>
+    </div>
+
+    <script>
+        const colors = ['#FF0000', '#00FF00', '#25FDE9', '#FF00FF', '#FFFF00', '#CECECE'];
+        let isRunning = false;
+        let repCount = 0;
+        let activeTimers = [];
+        let audioCtx = null;
+        let wakeLock = null; // Gestion de l'écran allumé
+
+        const el = {
+            chkCol: document.getElementById('chk-colors'),
+            chkNum: document.getElementById('chk-numbers'),
+            reps: document.getElementById('cfg-reps'),
+            maxNums: document.getElementById('cfg-max-nums'),
+            timeMin: document.getElementById('cfg-time-min'),
+            timeMax: document.getElementById('cfg-time-max'),
+            work: document.getElementById('cfg-work'),
+            rest: document.getElementById('cfg-rest'),
+            status: document.getElementById('status-text'),
+            wrapper: document.getElementById('circles-wrapper'),
+            counter: document.getElementById('counter'),
+            btn: document.getElementById('btn-toggle'),
+            btnReset: document.getElementById('btn-reset')
+        };
+
+        // --- GESTION WAKE LOCK (Anti-veille) ---
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                } catch (err) {
+                    console.error(`Erreur Wake Lock: ${err.message}`);
+                }
+            }
+        }
+
+        // Réactiver le Wake Lock si on revient sur l'app
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible' && isRunning) {
+                await requestWakeLock();
+            }
+        });
+
+        // --- SETUP ---
+        function setupMenus() {
+            const fill = (e, n, sel, step=1, unit="") => {
+                for(let i=step; i<=n; i+=step) e.add(new Option(i + unit, i, i===sel, i===sel));
+            };
+            fill(el.reps, 30, 6);
+            fill(el.maxNums, 6, 4);
+            fill(el.timeMin, 10, 2, 1, " s");
+            fill(el.timeMax, 10, 5, 1, " s");
+            fill(el.work, 15, 2, 1, " min");
+            for(let i=0.5; i<=5; i+=0.5) {
+                let lbl = i < 1 ? "30 s" : (i % 1 === 0 ? i + " min" : Math.floor(i) + " min 30");
+                el.rest.add(new Option(lbl, i, i===1, i===1));
+            }
+        }
+        setupMenus();
+
+        // --- UTILS ---
+        function killTimers() {
+            activeTimers.forEach(t => clearTimeout(t));
+            activeTimers = [];
+        }
+
+        function safeBeep(freq) {
+            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.connect(g); g.connect(audioCtx.destination);
+            o.frequency.value = freq; o.start();
+            g.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.2);
+            o.stop(audioCtx.currentTime + 0.2);
+        }
+
+        function safeSpeak(txt) {
+            if (!isRunning) return;
+            const u = new SpeechSynthesisUtterance(txt);
+            u.lang = 'fr-FR'; u.rate = 1.6;
+            window.speechSynthesis.speak(u);
+        }
+
+        // --- LOGIQUE CORE ---
+        function triggerFlash() {
+            if (!isRunning || el.status.textContent !== "TRAVAIL") return;
+
+            if (el.chkCol.checked) {
+                document.body.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
+            }
+            
+            if (el.chkNum.checked) {
+                el.wrapper.innerHTML = '';
+                let nums = [];
+                const count = Math.floor(Math.random() * parseInt(el.maxNums.value)) + 1;
+                for(let i=0; i < count; i++) {
+                    const n = Math.floor(Math.random()*6)+1;
+                    nums.push(n);
+                    const c = document.createElement('div');
+                    c.className = 'circle'; c.textContent = n;
+                    el.wrapper.appendChild(c);
+                }
+                safeSpeak(nums.join(', '));
+            }
+
+            const min = parseInt(el.timeMin.value) * 1000;
+            const max = Math.max(min + 200, parseInt(el.timeMax.value) * 1000);
+            const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+            
+            activeTimers.push(setTimeout(triggerFlash, delay));
+        }
+
+        function runCycle() {
+            if (!isRunning) return;
+            killTimers();
+
+            el.status.textContent = "TRAVAIL";
+            el.counter.textContent = `Série : ${repCount + 1} / ${el.reps.value}`;
+            safeSpeak("Travail");
+            triggerFlash();
+
+            activeTimers.push(setTimeout(() => {
+                if (!isRunning) return;
+                killTimers();
+                
+                el.status.textContent = "REPOS";
+                el.wrapper.innerHTML = '';
+                document.body.style.backgroundColor = "#f0f0f0";
+                safeSpeak("Repos");
+
+                const restMs = parseFloat(el.rest.value) * 60000;
+
+                activeTimers.push(setTimeout(() => safeBeep(600), restMs - 3000));
+                activeTimers.push(setTimeout(() => safeBeep(600), restMs - 2000));
+                activeTimers.push(setTimeout(() => safeBeep(800), restMs - 1000));
+
+                activeTimers.push(setTimeout(() => {
+                    repCount++;
+                    if (repCount < parseInt(el.reps.value)) {
+                        runCycle();
+                    } else {
+                        endSession();
+                    }
+                }, restMs));
+
+            }, parseFloat(el.work.value) * 60000));
+        }
+
+        function endSession() {
+            isRunning = false;
+            killTimers();
+            if (wakeLock) { wakeLock.release(); wakeLock = null; }
+            el.status.textContent = "FINI !";
+            el.btn.textContent = "DEMARRER";
+            el.btn.classList.remove('active-btn');
+            document.body.style.backgroundColor = "#f0f0f0";
+            safeSpeak("Session terminée");
+        }
+
+        function resetApp() {
+            isRunning = false;
+            repCount = 0;
+            killTimers();
+            if (wakeLock) { wakeLock.release(); wakeLock = null; }
+            window.speechSynthesis.cancel();
+            el.status.textContent = "PRÊT BOXE ?";
+            el.counter.textContent = "Série : 0 / 0";
+            el.wrapper.innerHTML = '';
+            el.btn.textContent = "DEMARRER";
+            el.btn.classList.remove('active-btn');
+            document.body.style.backgroundColor = "#f0f0f0";
+        }
+
+        el.btn.addEventListener('click', async () => {
+            if (isRunning) {
+                isRunning = false;
+                killTimers();
+                if (wakeLock) { wakeLock.release(); wakeLock = null; }
+                window.speechSynthesis.cancel();
+                el.status.textContent = "STOPPÉ";
+                el.btn.textContent = "REPRENDRE";
+                el.btn.classList.remove('active-btn');
+                document.body.style.backgroundColor = "#f0f0f0";
+            } else {
+                isRunning = true;
+                await requestWakeLock(); // Active l'anti-veille
+                el.btn.textContent = "STOP";
+                el.btn.classList.add('active-btn');
+                runCycle();
+            }
+        });
+
+        el.btnReset.addEventListener('click', resetApp);
+
+    </script>
+</body>
+</html>
