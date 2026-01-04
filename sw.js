@@ -1,26 +1,36 @@
-const cacheName = 'mon-app-v1';
-const assets = [
-  './',
-  './BGS_Travail_1.0.html',
-  './style.css',
-  './script.js',
-  './icon-192.png'
+const CACHE_NAME = 'Boxing-app-v5';
+const ASSETS = [
+  'Boxing_1.01.html',
+  'manifest.json'
+  // Ajoutez ici vos fichiers CSS ou images si vous les séparez plus tard
 ];
 
-// Installation : on met les fichiers en cache
-self.addEventListener('install', e => {
+// Installation : Mise en cache des ressources
+self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(cacheName).then(cache => {
-      return cache.addAll(assets);
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS);
     })
   );
 });
 
-// Utilisation : on sert les fichiers du cache si on est hors-ligne
-self.addEventListener('fetch', e => {
+// Activation : Nettoyage des anciens caches
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+      );
+    })
+  );
+});
+
+// Stratégie : Cache First, then Network
+self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then(response => {
+    caches.match(e.request).then((response) => {
       return response || fetch(e.request);
     })
   );
 });
+
