@@ -31,7 +31,7 @@
         .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
         select { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #ddd; font-size: 1rem; }
         input[type="checkbox"] { width: 25px; height: 25px; cursor: pointer; }
-        #status-text { font-size: clamp(2rem, 10vw, 4rem); font-weight: 900; text-transform: uppercase; margin-bottom: 15px; }
+        #status-text { font-size: clamp(2rem, 10vw, 4rem); font-weight: 900; text-transform: uppercase; margin-bottom: 10px; }
         #circles-wrapper { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; width: 100%; min-height: 150px; }
         .circle {
             width: clamp(80px, 20vw, 130px); height: clamp(80px, 20vw, 130px); 
@@ -47,11 +47,10 @@
             cursor: pointer; border-radius: 50px; border: 3px solid #222; background: white;
             width: 90%; max-width: 350px;
         }
-        #btn-reset {
-            background: #ddd; border-color: #777; font-size: 1rem; padding: 10px 40px;
-        }
+        #btn-reset { background: #ddd; border-color: #777; font-size: 1rem; padding: 10px 40px; }
         .active-btn { background: #e74c3c !important; color: white !important; }
-        #counter { font-size: 1.2rem; margin-top: 15px; font-weight: bold; color: #555; }
+        #counter { font-size: 1.2rem; font-weight: bold; color: #555; }
+        #timer-display { font-size: 2.2rem; font-weight: 900; color: #e74c3c; height: 3rem; margin-top: 5px; }
 
         @media (max-width: 768px) {
             body { flex-direction: column; }
@@ -82,6 +81,7 @@
         <div id="status-text">PRÊT BOXE ?</div>
         <div id="circles-wrapper"></div>
         <div id="counter">Série : 0 / 0</div>
+        <div id="timer-display"></div>
         
         <div class="controls">
             <button id="btn-toggle">DEMARRER</button>
@@ -109,25 +109,16 @@
             status: document.getElementById('status-text'),
             wrapper: document.getElementById('circles-wrapper'),
             counter: document.getElementById('counter'),
+            timer: document.getElementById('timer-display'),
             btn: document.getElementById('btn-toggle'),
             btnReset: document.getElementById('btn-reset')
         };
 
         async function requestWakeLock() {
             if ('wakeLock' in navigator) {
-                try {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                } catch (err) {
-                    console.error(`Wake Lock Error: ${err.message}`);
-                }
+                try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
             }
         }
-
-        document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible' && isRunning) {
-                await requestWakeLock();
-            }
-        });
 
         function setupMenus() {
             const fill = (e, n, sel, step=1, unit="") => {
@@ -146,8 +137,17 @@
         setupMenus();
 
         function killTimers() {
-            activeTimers.forEach(t => clearTimeout(t));
+            activeTimers.forEach(t => { clearTimeout(t); clearInterval(t); });
             activeTimers = [];
+            el.timer.textContent = "";
+        }
+
+        function safeSpeak(txt) {
+            if (!isRunning) return;
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(txt);
+            u.lang = 'fr-FR'; u.rate = 1.6;
+            window.speechSynthesis.speak(u);
         }
 
         function safeBeep(freq) {
@@ -160,21 +160,24 @@
             o.stop(audioCtx.currentTime + 0.2);
         }
 
-        function safeSpeak(txt) {
-            if (!isRunning) return;
-            // On annule les voix précédentes pour éviter les retards de file d'attente
-            window.speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(txt);
-            u.lang = 'fr-FR'; u.rate = 1.6;
-            window.speechSynthesis.speak(u);
+        function startCountdown(seconds) {
+            let remaining = Math.round(seconds);
+            el.timer.textContent = remaining + "s";
+            const interval = setInterval(() => {
+                remaining--;
+                if (remaining <= 0 || !isRunning) {
+                    clearInterval(interval);
+                    el.timer.textContent = "";
+                } else {
+                    el.timer.textContent = remaining + "s";
+                }
+            }, 1000);
+            activeTimers.push(interval);
         }
 
         function triggerFlash() {
             if (!isRunning || el.status.textContent !== "TRAVAIL") return;
-
-            if (el.chkCol.checked) {
-                document.body.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
-            }
+            if (el.chkCol.checked) document.body.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)];
             
             if (el.chkNum.checked) {
                 el.wrapper.innerHTML = '';
@@ -192,9 +195,7 @@
 
             const min = parseInt(el.timeMin.value) * 1000;
             const max = Math.max(min + 200, parseInt(el.timeMax.value) * 1000);
-            const delay = Math.floor(Math.random() * (max - min + 1)) + min;
-            
-            activeTimers.push(setTimeout(triggerFlash, delay));
+            activeTimers.push(setTimeout(triggerFlash, Math.floor(Math.random() * (max - min + 1)) + min));
         }
 
         function runCycle() {
@@ -215,27 +216,24 @@
                 document.body.style.backgroundColor = "#f0f0f0";
                 safeSpeak("Repos");
 
-                const restMs = parseFloat(el.rest.value) * 60000;
+                const restSec = parseFloat(el.rest.value) * 60;
+                startCountdown(restSec);
 
-                activeTimers.push(setTimeout(() => safeBeep(600), restMs - 3000));
-                activeTimers.push(setTimeout(() => safeBeep(600), restMs - 2000));
-                activeTimers.push(setTimeout(() => safeBeep(800), restMs - 1000));
+                activeTimers.push(setTimeout(() => safeBeep(600), (restSec - 3) * 1000));
+                activeTimers.push(setTimeout(() => safeBeep(600), (restSec - 2) * 1000));
+                activeTimers.push(setTimeout(() => safeBeep(800), (restSec - 1) * 1000));
 
                 activeTimers.push(setTimeout(() => {
                     repCount++;
-                    if (repCount < parseInt(el.reps.value)) {
-                        runCycle();
-                    } else {
-                        endSession();
-                    }
-                }, restMs));
+                    if (repCount < parseInt(el.reps.value)) runCycle();
+                    else endSession();
+                }, restSec * 1000));
 
             }, parseFloat(el.work.value) * 60000));
         }
 
         function endSession() {
-            isRunning = false;
-            killTimers();
+            isRunning = false; killTimers();
             if (wakeLock) { wakeLock.release(); wakeLock = null; }
             el.status.textContent = "FINI !";
             el.btn.textContent = "DEMARRER";
@@ -245,9 +243,7 @@
         }
 
         function resetApp() {
-            isRunning = false;
-            repCount = 0;
-            killTimers();
+            isRunning = false; repCount = 0; killTimers();
             if (wakeLock) { wakeLock.release(); wakeLock = null; }
             window.speechSynthesis.cancel();
             el.status.textContent = "PRÊT BOXE ?";
@@ -260,21 +256,16 @@
 
         el.btn.addEventListener('click', async () => {
             if (isRunning) {
-                isRunning = false;
-                killTimers();
-                if (wakeLock) { try { await wakeLock.release(); } catch(e){} wakeLock = null; }
+                isRunning = false; killTimers();
+                if (wakeLock) { try{await wakeLock.release();}catch(e){} wakeLock = null; }
                 window.speechSynthesis.cancel();
                 el.status.textContent = "STOPPÉ";
                 el.btn.textContent = "REPRENDRE";
                 el.btn.classList.remove('active-btn');
                 document.body.style.backgroundColor = "#f0f0f0";
             } else {
-                // --- INITIALISATION AUDIO IMMEDIATE ---
-                // On réveille l'audio context
                 if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if(audioCtx.state === 'suspended') audioCtx.resume();
-                
-                // On réveille la synthèse vocale avec un son vide
                 window.speechSynthesis.cancel();
                 window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
 
