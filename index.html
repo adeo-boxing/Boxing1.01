@@ -150,6 +150,32 @@
             window.speechSynthesis.speak(u);
         }
 
+        // --- SON DE CLOCHE REALISTE ---
+        function playBoxingBell() {
+            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+
+            const now = audioCtx.currentTime;
+            
+            // On combine plusieurs fréquences pour créer le timbre métallique d'une cloche
+            [150, 280, 520, 1100].forEach(freq => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = freq > 500 ? 'sine' : 'triangle';
+                osc.frequency.setValueAtTime(freq, now);
+                
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 2);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start(now);
+                osc.stop(now + 2);
+            });
+        }
+
         function safeBeep(freq) {
             if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -204,7 +230,14 @@
 
             el.status.textContent = "TRAVAIL";
             el.counter.textContent = `Série : ${repCount + 1} / ${el.reps.value}`;
-            safeSpeak("Travail");
+            
+            // CLOCHE AU DEBUT DU TRAVAIL
+            playBoxingBell();
+            
+            activeTimers.push(setTimeout(() => {
+               if(isRunning) safeSpeak("Allez !");
+            }, 500));
+
             triggerFlash();
 
             activeTimers.push(setTimeout(() => {
@@ -214,7 +247,10 @@
                 el.status.textContent = "REPOS";
                 el.wrapper.innerHTML = '';
                 document.body.style.backgroundColor = "#f0f0f0";
-                safeSpeak("Repos");
+                
+                // DOUBLE CLOCHE POUR LE REPOS
+                playBoxingBell();
+                activeTimers.push(setTimeout(playBoxingBell, 300));
 
                 const restSec = parseFloat(el.rest.value) * 60;
                 startCountdown(restSec);
@@ -239,6 +275,12 @@
             el.btn.textContent = "DEMARRER";
             el.btn.classList.remove('active-btn');
             document.body.style.backgroundColor = "#f0f0f0";
+            
+            // TRIPLE CLOCHE POUR LA FIN DE SESSION
+            playBoxingBell();
+            setTimeout(playBoxingBell, 300);
+            setTimeout(playBoxingBell, 600);
+            
             safeSpeak("Session terminée");
         }
 
