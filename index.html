@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>App Travail BOXE - PWA Ultra Stable</title>
+    <link rel="manifest" href="manifest.json">
     <style>
         body {
             margin: 0; padding: 0;
@@ -90,6 +91,15 @@
     </div>
 
     <script>
+        // --- ÉTAPE A : ENREGISTREMENT DU SERVICE WORKER ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.worker = navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker OK'))
+                    .catch(err => console.log('Service Worker Erreur', err));
+            });
+        }
+
         const colors = ['#FF0000', '#00FF00', '#25FDE9', '#FF00FF', '#FFFF00', '#CECECE'];
         let isRunning = false;
         let repCount = 0;
@@ -209,7 +219,6 @@
                     c.className = 'circle'; c.textContent = n;
                     el.wrapper.appendChild(c);
                 }
-                // Ici on laisse cancel=true pour que les nouveaux numéros soient prioritaires sur les anciens
                 safeSpeak(nums.join(', '), true);
             }
 
@@ -226,12 +235,8 @@
             el.counter.textContent = `Série : ${repCount + 1} / ${el.reps.value}`;
             
             playBoxingBell();
-            
-            // Correction ici : On utilise forceCancel = false pour que "Allez" 
-            // n'écrase pas les numéros de coups qui arrivent juste après
             safeSpeak("Allez", false);
 
-            // On lance les flashs après un tout petit délai pour laisser la cloche sonner
             activeTimers.push(setTimeout(triggerFlash, 500));
 
             activeTimers.push(setTimeout(() => {
@@ -245,7 +250,6 @@
                 playBoxingBell();
                 activeTimers.push(setTimeout(playBoxingBell, 300));
                 
-                // On annonce le repos
                 safeSpeak("Repos", true);
 
                 const restSec = parseFloat(el.rest.value) * 60;
